@@ -21,7 +21,59 @@
 (function () {
     var FAR_FUTURE = new Date('2060-10-22');
 
-    var Evaporate = function (config) {
+    var EvaporateServer = function (config)
+    {
+        var con = extend({
+            logging: true,
+            cryptoHexEncodedHash256: null
+        }, config);
+
+        if (console && console.log) {
+            l = console;
+            l.d = l.log;
+            l.w = console.warn ? l.warn : l.d;
+            l.e = console.error ? l.error : l.d;
+        }
+
+        var _ = this;
+
+        function noOpLogger() { return {d: function () {}, w: function () {}, e: function () {}}; }
+
+        if (!con.logging) {
+            // Reset the logger to be a no_op
+            l = noOpLogger();
+        }
+
+        var stringToSignV4 = function(stringObject) {
+
+            if(typeof stringObject !== 'object')
+            {
+                try {
+                    stringObject = JSON.parse(stringObject);
+                }
+                catch (err) {
+                    //cannot parse
+                }
+            }
+
+            var parts = [];
+            parts.push(stringObject.encryption);
+            parts.push(stringObject.dateString);
+            parts.push(stringObject.credentialString);
+            parts.push(con.cryptoHexEncodedHash256(stringObject.canonicalRequest));
+            var result = parts.join('\n');
+
+            l.d('makeStringToSignServer Server Signed (V4)', result);
+            return result;
+        };
+
+        _.signString = function(stringObject)
+        {
+            return stringToSignV4(stringObject);
+        }
+    };
+
+    var EvaporateClient = function (config) {
 
         var PENDING = 0, EVAPORATING = 2, COMPLETE = 3, PAUSED = 4, CANCELED = 5, ERROR = 10, ABORTED = 20, ETAG_OF_0_LENGTH_BLOB = '"d41d8cd98f00b204e9800998ecf8427e"';
         var IMMUTABLE_OPTIONS = [
@@ -78,6 +130,7 @@
             awsLambdaFunction: null,
             maxFileSize: null,
             signResponseHandler: null,
+            serverSign: null,
             // undocumented
             testUnsupported: false,
             simulateStalling: false,
@@ -92,13 +145,13 @@
         }
 
         this.supported = !(
-            typeof File === 'undefined' ||
-            typeof Blob === 'undefined' ||
-            typeof (
-            Blob.prototype['webkitSlice'] ||
-            Blob.prototype['mozSlice']||
-            Blob.prototype['slice']) === 'undefined' ||
-            !!config.testUnsupported);
+        typeof File === 'undefined' ||
+        typeof Blob === 'undefined' ||
+        typeof (
+        Blob.prototype['webkitSlice'] ||
+        Blob.prototype['mozSlice']||
+        Blob.prototype['slice']) === 'undefined' ||
+        !!config.testUnsupported);
 
         if (!con.bucket) {
             l.e("The AWS 'bucket' option must be present.");
@@ -971,8 +1024,8 @@
 
                 // check that the part sizes and bucket match, and if the file name of the upload
                 // matches if onlyRetryForSameFileName is true
-                return con.partSize === u.partSize 
-                    && completedAt > HOURS_AGO 
+                return con.partSize === u.partSize
+                    && completedAt > HOURS_AGO
                     && con.bucket === u.bucket
                     && (con.onlyRetryForSameFileName ? me.name === u.awsKey : true);
             }
@@ -1251,10 +1304,10 @@
                                 clearCurrentXhr(authRequester);
                                 authRequester.onFailedAuth(xhr);
                             } else {
-                              l.d('authorizedSend got signature for step: \'' + authRequester.step + '\'    sig: ' + payload);
-                              authRequester.auth = payload;
-                              clearCurrentXhr(authRequester);
-                              authRequester.onGotAuth();
+                                l.d('authorizedSend got signature for step: \'' + authRequester.step + '\'    sig: ' + payload);
+                                authRequester.auth = payload;
+                                clearCurrentXhr(authRequester);
+                                authRequester.onGotAuth();
                             }
                         } else {
                             warnMsg = 'failed to get authorization (readyState=4) for ' + authRequester.step + '.  xhr.status: ' + xhr.status + '.  xhr.response: ' + xhr.response;
@@ -1310,7 +1363,7 @@
             }
 
             function stringToSignMethod(request) {
-                return encodeURIComponent(con.awsSignatureVersion === '4' ? stringToSignV4(request) : makeStringToSign(request));
+                return encodeURIComponent(con.awsSignatureVersion === '4' ? (con.serverSign ? stringToSignV4Server(request) : stringToSignV4(request)) : makeStringToSign(request));
             }
 
             function signResponse(payload) {
@@ -1362,6 +1415,18 @@
                     request.path;
 
                 l.d('makeStringToSign (V2)', result);
+                return result;
+            }
+
+            function stringToSignV4Server(request) {
+                var parts = {};
+                parts.encryption = 'AWS4-HMAC-SHA256';
+                parts.dateString = request.dateString;
+                parts.credentialString = credentialStringV4(request);
+                parts.canonicalRequest = canonicalRequestV4(request);
+                var result = JSON.stringify(parts);
+
+                l.d('makeStringToSignServer (V4)', result);
                 return result;
             }
 
@@ -1645,9 +1710,12 @@
     }
 
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = Evaporate;
+        module.exports = {
+            evaporateClient: EvaporateClient,
+            evaporateServer: EvaporateServer
+        };
     } else if (typeof window !== 'undefined') {
-        window.Evaporate = Evaporate;
+        window.Evaporate = EvaporateClient;
     }
 
 })();

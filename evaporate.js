@@ -20,12 +20,12 @@
 
 var extend = require('extend');
 
-
 (function () {
     var FAR_FUTURE = new Date('2060-10-22');
 
-    var EvaporateServer = function (config)
-    {
+    var EvaporateServer = function (config) {
+        var crypto = require('crypto');
+
         var con = extend({
             logging: true,
             cryptoHexEncodedHash256: null
@@ -40,17 +40,51 @@ var extend = require('extend');
 
         var _ = this;
 
-        function noOpLogger() { return {d: function () {}, w: function () {}, e: function () {}}; }
+        function noOpLogger() {
+            return {
+                d: function () {
+                }, w: function () {
+                }, e: function () {
+                }
+            };
+        }
 
         if (!con.logging) {
             // Reset the logger to be a no_op
             l = noOpLogger();
         }
 
-        var stringToSignV4 = function(stringObject) {
 
-            if(typeof stringObject !== 'object')
-            {
+        function canonicalRequestV4ObjectToString(request) {
+            var parts = [];
+
+            parts.push(request.method);
+            parts.push(request.pathname);
+            parts.push(request.canonicalQueryStringV4);
+
+            parts.push(request.canonicalHeaders.join("\n") + '\n');
+            parts.push(request.signedHeaders.join(";"));
+            parts.push(request.getPayloadSha256Content);
+
+            var result = parts.join("\n");
+            l.d('CanonicalRequest', result);
+            return result;
+        }
+
+
+        function credentialStringV4ObjectToString(request) {
+            var parts = [];
+
+            parts.push(request.dateString);
+            parts.push(request.awsRegion);
+            parts.push(request.service);
+            parts.push(request.requestType);
+            return parts.join('/');
+        }
+
+        var stringToSignV4 = function (stringObject) {
+
+            if (typeof stringObject !== 'object') {
                 try {
                     stringObject = JSON.parse(stringObject);
                 }
@@ -62,17 +96,22 @@ var extend = require('extend');
             var parts = [];
             parts.push(stringObject.encryption);
             parts.push(stringObject.dateString);
-            parts.push(stringObject.credentialString);
-            parts.push(con.cryptoHexEncodedHash256(stringObject.canonicalRequest));
+            parts.push(credentialStringV4ObjectToString(stringObject.credentialString));
+            parts.push(con.cryptoHexEncodedHash256(canonicalRequestV4ObjectToString(stringObject.canonicalRequest)));
             var result = parts.join('\n');
 
             l.d('makeStringToSignServer Server Signed (V4)', result);
             return result;
         };
 
-        _.signString = function(stringObject)
-        {
-            return stringToSignV4(stringObject);
+        _.signString = function (privateKey, stringObject) {
+
+            const signedString = crypto
+                .createHmac('sha1', privateKey)
+                .update(stringToSignV4(stringObject))
+                .digest('base64');
+
+            return signedString;
         }
     };
 
@@ -101,7 +140,14 @@ var extend = require('extend');
         var _ = this;
         var files = [];
 
-        function noOpLogger() { return {d: function () {}, w: function () {}, e: function () {}}; }
+        function noOpLogger() {
+            return {
+                d: function () {
+                }, w: function () {
+                }, e: function () {
+                }
+            };
+        }
 
         var l = noOpLogger();
 
@@ -127,7 +173,7 @@ var extend = require('extend');
             awsRegion: null,
             awsSignatureVersion: '2',
             s3FileCacheHoursAgo: null, // Must be a whole number of hours. Will be interpreted as negative (hours in the past).
-            signParams:{},
+            signParams: {},
             signHeaders: {},
             awsLambda: null,
             awsLambdaFunction: null,
@@ -152,9 +198,8 @@ var extend = require('extend');
         typeof Blob === 'undefined' ||
         typeof (
         Blob.prototype['webkitSlice'] ||
-        Blob.prototype['mozSlice']||
-        Blob.prototype['slice']) === 'undefined' ||
-        !!config.testUnsupported);
+        Blob.prototype['mozSlice'] ||
+        Blob.prototype['slice']) === 'undefined' || !!config.testUnsupported);
 
         if (!con.bucket) {
             l.e("The AWS 'bucket' option must be present.");
@@ -285,10 +330,12 @@ var extend = require('extend');
 
         //con.simulateStalling =  true
 
-        _.add = function (file,  pConfig) {
+        _.add = function (file, pConfig) {
             var c = extend(pConfig, {});
 
-            IMMUTABLE_OPTIONS.map(function (a) { delete c[a]; });
+            IMMUTABLE_OPTIONS.map(function (a) {
+                delete c[a];
+            });
 
             var fileConfig = extend(con, c);
 
@@ -309,7 +356,9 @@ var extend = require('extend');
             /*if (!(file.file instanceof File)){
              err += '.file attribute must be instanceof File';
              }*/
-            if (err) { return err; }
+            if (err) {
+                return err;
+            }
 
             var newId = addFile(file, fileConfig);
             asynProcessQueue();
@@ -327,22 +376,31 @@ var extend = require('extend');
             }
         };
 
-        _.pause = function (id) {};
+        _.pause = function (id) {
+        };
 
-        _.resume = function (id) {};
+        _.resume = function (id) {
+        };
 
-        _.forceRetry = function () {};
+        _.forceRetry = function () {
+        };
 
         function addFile(file, fileConfig) {
 
             var id = files.length;
             files.push(new FileUpload(extend({
-                progress: function () {},
-                complete: function () {},
-                cancelled: function () {},
-                info: function () {},
-                warn: function () {},
-                error: function () {},
+                progress: function () {
+                },
+                complete: function () {
+                },
+                cancelled: function () {
+                },
+                info: function () {
+                },
+                warn: function () {
+                },
+                error: function () {
+                },
                 xAmzHeadersAtInitiate: {},
                 notSignedHeadersAtInitiate: {},
                 xAmzHeadersAtUpload: {},
@@ -366,7 +424,7 @@ var extend = require('extend');
 
 
         function asynProcessQueue() {
-            setTimeout(processQueue,1);
+            setTimeout(processQueue, 1);
         }
 
         function processQueue() {
@@ -393,7 +451,7 @@ var extend = require('extend');
         function FileUpload(file, con) {
             var me = this, parts = [], completedParts = [], progressTotalInterval, progressPartsInterval, countUploadAttempts = 0,
                 countInitiateAttempts = 0, countCompleteAttempts = 0;
-            extend(me,file);
+            extend(me, file);
 
             me.start = function () {
                 l.d('starting FileUpload ' + me.id);
@@ -589,7 +647,7 @@ var extend = require('extend');
                     } else {
                         part.status = ERROR;
                         part.loadedBytes = 0;
-                        msg = 'eTag matches MD5 of 0 length blob for part #' + partNumber  + '   Retrying part.';
+                        msg = 'eTag matches MD5 of 0 length blob for part #' + partNumber + '   Retrying part.';
                         l.w(msg);
                         me.warn(msg);
                     }
@@ -635,12 +693,12 @@ var extend = require('extend');
                 var part = parts[partNumber];
                 if (part.currentXhr) {
                     if (!!clearReadyStateCallback) {
-                        part.currentXhr.onreadystatechange = function () {};
+                        part.currentXhr.onreadystatechange = function () {
+                        };
                     }
                     part.currentXhr.abort();
                 }
             }
-
 
 
             function completeUpload() { //http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadComplete.html
@@ -800,7 +858,7 @@ var extend = require('extend');
                 l.d('abortUpload');
                 me.info('will attempt to abort the upload');
 
-                if(typeof me.uploadId === 'undefined') {
+                if (typeof me.uploadId === 'undefined') {
                     setStatus(ABORTED);
                     return;
                 }
@@ -855,7 +913,9 @@ var extend = require('extend');
                     var parts = oDOM.getElementsByTagName("Part");
                     if (parts.length) { // Some parts are still uploading
                         l.d('Parts still found after abort...waiting.');
-                        setTimeout(function () { abortUpload(); }, 1000);
+                        setTimeout(function () {
+                            abortUpload();
+                        }, 1000);
                     } else {
                         me.info('upload canceled');
                     }
@@ -1090,7 +1150,7 @@ var extend = require('extend');
 
 
                 info = stati.toString() + ' // bytesLoaded: ' + bytesLoaded.toString();
-                l.d('processPartsList()  anyPartHasErrored: ' + anyPartHasErrored,info);
+                l.d('processPartsList()  anyPartHasErrored: ' + anyPartHasErrored, info);
 
                 if (countUploadAttempts >= (parts.length - 1) || anyPartHasErrored) {
                     me.info('part stati: ' + info);
@@ -1112,7 +1172,7 @@ var extend = require('extend');
                         totalBytesLoaded += part.loadedBytes;
                     });
 
-                    me.progress(totalBytesLoaded/me.sizeBytes);
+                    me.progress(totalBytesLoaded / me.sizeBytes);
                 }, con.progressIntervalMS);
             }
 
@@ -1138,7 +1198,7 @@ var extend = require('extend');
                         }
 
                         if (part.loadedBytesPrevious === null) {
-                            l.d(i,'no previous ');
+                            l.d(i, 'no previous ');
                             part.loadedBytesPrevious = part.loadedBytes;
                             return;
                         }
@@ -1156,12 +1216,12 @@ var extend = require('extend');
                             setTimeout(function () {
                                 me.info('part #' + i + ' stalled. will abort. ' + part.loadedBytesPrevious + ' ' + part.loadedBytes);
                                 abortPart(i);
-                            },0);
+                            }, 0);
                         }
 
                         part.loadedBytesPrevious = part.loadedBytes;
                     });
-                },2 * 60 * 1000);
+                }, 2 * 60 * 1000);
             }
 
             function monitorProgress() {
@@ -1180,7 +1240,7 @@ var extend = require('extend');
                     return result;
                 };
 
-                l.d('setupRequest()',requester);
+                l.d('setupRequest()', requester);
 
                 var datetime = con.timeUrl ? new Date(new Date().getTime() + localTimeOffset) : new Date();
                 requester.dateString = datetime.toISOString().slice(0, 19).replace(/-|:/g, '') + "Z";
@@ -1289,7 +1349,9 @@ var extend = require('extend');
 
                 var signParams = makeSignParamsObject(me.signParams);
                 for (var param in signParams) {
-                    if (!signParams.hasOwnProperty(param)) { continue; }
+                    if (!signParams.hasOwnProperty(param)) {
+                        continue;
+                    }
                     url += ('&' + encodeURIComponent(param) + '=' + encodeURIComponent(signParams[param]));
                 }
 
@@ -1300,7 +1362,7 @@ var extend = require('extend');
                         if (xhr.status === 200) {
                             var payload = signResponse(xhr.response);
 
-                            if (con.awsSignatureVersion === '2' &&  payload.length !== 28) {
+                            if (con.awsSignatureVersion === '2' && payload.length !== 28) {
                                 warnMsg = 'failed to get authorization (readyState=4) for ' + authRequester.step + '.  xhr.status: ' + xhr.status + '.  xhr.response: ' + xhr.response;
                                 l.w(warnMsg);
                                 me.warn(warnMsg);
@@ -1332,11 +1394,13 @@ var extend = require('extend');
                 xhr.open('GET', url);
                 var signHeaders = makeSignParamsObject(me.signHeaders);
                 for (var header in signHeaders) {
-                    if (!signHeaders.hasOwnProperty(header)) { continue; }
+                    if (!signHeaders.hasOwnProperty(header)) {
+                        continue;
+                    }
                     xhr.setRequestHeader(header, signHeaders[header])
                 }
 
-                if (typeof me.beforeSigner  === 'function') {
+                if (typeof me.beforeSigner === 'function') {
                     me.beforeSigner(xhr, url);
                 }
                 xhr.send();
@@ -1380,7 +1444,9 @@ var extend = require('extend');
             function makeSignParamsObject(params) {
                 var out = {};
                 for (var param in params) {
-                    if (!params.hasOwnProperty(param)) { continue; }
+                    if (!params.hasOwnProperty(param)) {
+                        continue;
+                    }
                     if (typeof params[param] === 'function') {
                         out[param] = params[param]();
                     } else {
@@ -1425,8 +1491,8 @@ var extend = require('extend');
                 var parts = {};
                 parts.encryption = 'AWS4-HMAC-SHA256';
                 parts.dateString = request.dateString;
-                parts.credentialString = credentialStringV4(request);
-                parts.canonicalRequest = canonicalRequestV4(request);
+                parts.credentialString = credentialStringV4Server(request);
+                parts.canonicalRequest = canonicalRequestV4Server(request);
                 var result = JSON.stringify(parts);
 
                 l.d('makeStringToSignServer (V4)', result);
@@ -1462,6 +1528,16 @@ var extend = require('extend');
                 return parts.join(', ');
             }
 
+            function credentialStringV4Server(request) {
+                var parts = {};
+
+                parts.dateString = request.dateString.slice(0, 8);
+                parts.awsRegion = con.awsRegion;
+                parts.service = 's3';
+                parts.requestType = 'aws4_request';
+                return parts;
+            }
+
             function credentialStringV4(request) {
                 var parts = [];
 
@@ -1470,6 +1546,23 @@ var extend = require('extend');
                 parts.push('s3');
                 parts.push('aws4_request');
                 return parts.join('/');
+            }
+
+            function canonicalRequestV4Server(request) {
+                var parts = {};
+
+                parts.method = request.method;
+                parts.pathname = uri(request.path).pathname;
+                parts.canonicalQueryStringV4 = canonicalQueryStringV4(request) || '';
+
+                var headers = canonicalHeadersV4(request);
+                parts.canonicalHeaders = headers.canonicalHeaders.split('\n');
+                parts.signedHeaders = headers.signedHeaders.split(";");
+                parts.getPayloadSha256Content = request.getPayloadSha256Content();
+
+                var result = parts;
+                l.d('CanonicalRequest', result);
+                return result;
             }
 
             function canonicalRequestV4(request) {
@@ -1599,7 +1692,7 @@ var extend = require('extend');
             }
 
             function assignCurrentXhr(requester) {
-                return getBaseXhrObject(requester).currentXhr =  new XMLHttpRequest();
+                return getBaseXhrObject(requester).currentXhr = new XMLHttpRequest();
             }
 
             function clearCurrentXhr(requester) {

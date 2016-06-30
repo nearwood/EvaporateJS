@@ -523,7 +523,7 @@ var extend = require('extend');
             function initiateUpload(awsKey) { // see: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadInitiate.html
                 var initiate = {
                         method: 'POST',
-                        path: getPath() + '?uploads',
+                        path: getPath() + '?uploads&fileSize='+me.file.size+'&fileType='+me.file.type,
                         step: 'initiate',
                         x_amz_headers: me.xAmzHeadersAtInitiate,
                         not_signed_headers: me.notSignedHeadersAtInitiate

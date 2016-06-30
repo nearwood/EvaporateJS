@@ -385,6 +385,12 @@ var extend = require('extend');
         _.forceRetry = function () {
         };
 
+        _.remove = function (uploadKey) {
+            if (uploadKey) {
+                removeUpload(uploadKey);
+            }
+        };
+
         function addFile(file, fileConfig) {
 
             var id = files.length;
@@ -400,6 +406,8 @@ var extend = require('extend');
                 warn: function () {
                 },
                 error: function () {
+                },
+                callbackUploadKey: function(){
                 },
                 xAmzHeadersAtInitiate: {},
                 notSignedHeadersAtInitiate: {},
@@ -1044,6 +1052,7 @@ var extend = require('extend');
                         signParams: me.signParams,
                         createdAt: new Date().toISOString()
                     };
+                me.callbackUploadKey(fileKey);
                 if (con.computeContentMd5 && parts.length && typeof parts[1].md5_digest !== 'undefined') {
                     newUpload.firstMd5Digest = parts[1].md5_digest;
                 }

@@ -850,6 +850,12 @@ var extend = require('extend');
                             processPartsList();
                         }
                     }
+                    else if(i === numParts && part.status === COMPLETE)
+                    {
+                        part.md5_digest = me.firstMd5Digest;
+                        createUploadFile();
+                        processPartsList();
+                    }
                 }
             }
 

@@ -129,6 +129,7 @@ var extend = require('extend');
             'allowS3ExistenceOptimization',
             'onlyRetryForSameFileName',
             'timeUrl',
+            'signUrl',
             'cryptoMd5Method',
             'cryptoHmacMethod',
             'cryptoHexEncodedHash256',
@@ -166,6 +167,7 @@ var extend = require('extend');
             allowS3ExistenceOptimization: false,
             onlyRetryForSameFileName: false,
             timeUrl: null,
+            signUrl: null,
             cryptoMd5Method: null,
             cryptoHmacMethod: null,
             cryptoHexEncodedHash256: null,
@@ -531,7 +533,7 @@ var extend = require('extend');
             function initiateUpload(awsKey) { // see: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadInitiate.html
                 var initiate = {
                         method: 'POST',
-                        path: getPath() + '?uploads&fileSize='+me.file.size+'&fileType='+me.file.type,
+                        path: getPath() + '?uploads=&fileSize='+me.file.size+'&fileType='+(me.file.type.replace(/\//g, '%2F')),
                         step: 'initiate',
                         x_amz_headers: me.xAmzHeadersAtInitiate,
                         not_signed_headers: me.notSignedHeadersAtInitiate
@@ -1271,72 +1273,144 @@ var extend = require('extend');
                         return;
                     }
 
-                    var xhr = assignCurrentXhr(requester);
 
-                    var payload = requester.getPayload();
                     var url = AWS_URL + requester.path;
                     if (requester.query_string) {
                         url += requester.query_string;
                     }
-                    var all_headers = {};
-                    var status_success = requester.successStatus || 200;
 
-                    extend(all_headers, requester.not_signed_headers);
-                    extend(all_headers, requester.x_amz_headers);
 
-                    if (con.simulateErrors && requester.attempts === 1 && requester.step === 'upload #3') {
-                        l.d('simulating error by POST part #3 to invalid url');
-                        url = 'https:///foo';
-                    }
+                    onGotAuthCallback = function (url) {
 
-                    xhr.open(requester.method, url);
-                    xhr.setRequestHeader('Authorization', authorizationMethod(requester));
+                        var xhr = assignCurrentXhr(requester);
 
-                    for (var key in all_headers) {
-                        if (all_headers.hasOwnProperty(key)) {
-                            xhr.setRequestHeader(key, all_headers[key]);
+                        var payload = requester.getPayload();
+                        var all_headers = {};
+                        var status_success = requester.successStatus || 200;
+
+                        extend(all_headers, requester.not_signed_headers);
+                        extend(all_headers, requester.x_amz_headers);
+
+                        if (con.simulateErrors && requester.attempts === 1 && requester.step === 'upload #3') {
+                            l.d('simulating error by POST part #3 to invalid url');
+                            url = 'https:///foo';
                         }
+
+
+
+                        xhr.open(requester.method, url);
+                        xhr.setRequestHeader('Authorization', authorizationMethod(requester));
+
+                        for (var key in all_headers) {
+                            if (all_headers.hasOwnProperty(key)) {
+                                xhr.setRequestHeader(key, all_headers[key]);
+                            }
+                        }
+
+                        if (con.awsSignatureVersion === '4') {
+                            xhr.setRequestHeader("x-amz-content-sha256", requester.getPayloadSha256Content());
+                        }
+
+                        if (requester.contentType) {
+                            xhr.setRequestHeader('Content-Type', requester.contentType);
+                        }
+
+                        if (requester.md5_digest) {
+                            xhr.setRequestHeader('Content-MD5', requester.md5_digest);
+                        }
+                        xhr.onreadystatechange = function () {
+                            if (xhr.readyState === 4) {
+
+                                if (payload) {
+                                    // Test, per http://code.google.com/p/chromium/issues/detail?id=167111#c20
+                                    l.d('  ### ' + payload.size);
+                                }
+                                clearCurrentXhr(requester);
+                                if (xhr.status === status_success) {
+                                    requester.on200(xhr);
+                                } else {
+                                    requester.onErr(xhr);
+                                }
+                            }
+                        };
+
+                        xhr.onerror = function () {
+                            clearCurrentXhr(requester);
+                            requester.onErr(xhr, true);
+                        };
+
+                        if (typeof requester.onProgress === 'function') {
+                            xhr.upload.onprogress = function (evt) {
+                                requester.onProgress(evt);
+                            };
+                        }
+                        xhr.send(payload);
+
                     }
 
-                    if (con.awsSignatureVersion === '4') {
-                        xhr.setRequestHeader("x-amz-content-sha256", requester.getPayloadSha256Content());
+                    if (con.signUrl) {
+                        requester.onSignUrl(url, onGotAuthCallback);
+                    }
+                    else
+                    {
+                        onGotAuthCallback(url);
                     }
 
-                    if (requester.contentType) {
-                        xhr.setRequestHeader('Content-Type', requester.contentType);
+                };
+
+
+                requester.onSignUrl200 = function(xhr, callback)
+                {
+                    var dataJSON = JSON.parse(xhr.responseText);
+                    url = dataJSON.signedUrl;
+                    callback(url);
+                };
+
+                requester.onSignUrlErr = function(xhr, isOnError)
+                {
+                    xhr.abort();
+
+                    me.error("Error");
+                    requester.onErr("Error");
+                };
+
+                requester.onSignUrl = function (url, callback) {
+
+                    if (hasCurrentXhr(requester)) {
+                        l.w('onSignUrl() step', requester.step, 'is already in progress. Returning.');
+                        return;
                     }
 
-                    if (requester.md5_digest) {
-                        xhr.setRequestHeader('Content-MD5', requester.md5_digest);
-                    }
+                    var status_success = requester.successStatus || 200;
+                    var xhr = assignCurrentXhr(requester);
+
+                    var signUrl = con.signUrl + '?url=' + encodeURIComponent(url);
+
+                    xhr.open("GET", signUrl);
+
                     xhr.onreadystatechange = function () {
                         if (xhr.readyState === 4) {
 
-                            if (payload) {
-                                // Test, per http://code.google.com/p/chromium/issues/detail?id=167111#c20
-                                l.d('  ### ' + payload.size);
-                            }
                             clearCurrentXhr(requester);
                             if (xhr.status === status_success) {
-                                requester.on200(xhr);
+                                requester.onSignUrl200(xhr, callback);
                             } else {
-                                requester.onErr(xhr);
+                                requester.onSignUrlErr(xhr);
                             }
+
                         }
                     };
 
                     xhr.onerror = function () {
                         clearCurrentXhr(requester);
-                        requester.onErr(xhr, true);
+                        requester.onSignUrlErr(xhr, true);
                     };
 
-                    if (typeof requester.onProgress === 'function') {
-                        xhr.upload.onprogress = function (evt) {
-                            requester.onProgress(evt);
-                        };
-                    }
-                    xhr.send(payload);
+                    xhr.send();
+
+
                 };
+
 
                 requester.onFailedAuth = requester.onFailedAuth || function (xhr) {
                         me.error('Error onFailedAuth for step: ' + requester.step);

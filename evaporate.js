@@ -1384,7 +1384,7 @@ var extend = require('extend');
                     var status_success = requester.successStatus || 200;
                     var xhr = assignCurrentXhr(requester);
 
-                    var signUrl = con.signUrl + '?url=' + encodeURIComponent(url);
+                    var signUrl = con.signUrl + ((con.signerUrl.indexOf('?') === 0) ? '?url=' : '&url=') + encodeURIComponent(url);
 
                     xhr.open("GET", signUrl);
 
@@ -1433,7 +1433,7 @@ var extend = require('extend');
                 }
 
                 var xhr = assignCurrentXhr(authRequester),
-                    url = [con.signerUrl, '?to_sign=', stringToSignMethod(authRequester), '&datetime=', authRequester.dateString].join(''),
+                    url = [con.signerUrl, (con.signerUrl.indexOf('?') === 0) ? '?to_sign=' : '&to_sign=', stringToSignMethod(authRequester), '&datetime=', authRequester.dateString].join(''),
                     warnMsg;
 
                 var signParams = makeSignParamsObject(me.signParams);

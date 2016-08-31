@@ -312,7 +312,7 @@ var extend = require('extend');
         if (con.timeUrl) {
             var xhr = new XMLHttpRequest();
 
-            xhr.open("GET", con.timeUrl + '?requestTime=' + new Date().getTime());
+            xhr.open("GET", con.timeUrl + ((con.timeUrl.indexOf('?') < 0) ? '?' : '&') + 'requestTime=' + new Date().getTime());
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
@@ -1384,7 +1384,7 @@ var extend = require('extend');
                     var status_success = requester.successStatus || 200;
                     var xhr = assignCurrentXhr(requester);
 
-                    var signUrl = con.signUrl + ((con.signerUrl.indexOf('?') < 0) ? '?url=' : '&url=') + encodeURIComponent(url);
+                    var signUrl = con.signUrl + ((con.signerUrl.indexOf('?') < 0) ? '?' : '&') + 'url=' + encodeURIComponent(url);
 
                     xhr.open("GET", signUrl);
 
@@ -1433,7 +1433,7 @@ var extend = require('extend');
                 }
 
                 var xhr = assignCurrentXhr(authRequester),
-                    url = [con.signerUrl, (con.signerUrl.indexOf('?') < 0) ? '?to_sign=' : '&to_sign=', stringToSignMethod(authRequester), '&datetime=', authRequester.dateString].join(''),
+                    url = [con.signerUrl, ((con.signerUrl.indexOf('?') < 0) ? '?' : '&') + 'to_sign=', stringToSignMethod(authRequester), '&datetime=', authRequester.dateString].join(''),
                     warnMsg;
 
                 var signParams = makeSignParamsObject(me.signParams);

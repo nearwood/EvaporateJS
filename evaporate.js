@@ -1315,9 +1315,9 @@ var extend = require('extend');
                             xhr.setRequestHeader('Content-Type', requester.contentType);
                         }
 
-                        if (requester.md5_digest) {
+                        /*if (requester.md5_digest) {
                             xhr.setRequestHeader('Content-MD5', requester.md5_digest);
-                        }
+                        }*/
                         xhr.onreadystatechange = function () {
                             if (xhr.readyState === 4) {
 
@@ -1714,9 +1714,9 @@ var extend = require('extend');
                     canonicalHeaders[key] = value.replace(/\s+/g, ' ');
                 }
 
-                if (request.md5_digest) {
+                /*if (request.md5_digest) {
                     addHeader("Content-Md5", request.md5_digest);
-                }
+                }*/
 
                 addHeader('Host', AWS_HOST);
 

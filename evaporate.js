@@ -1358,15 +1358,7 @@ var extend = require('extend');
 
                 };
 
-
-                requester.onSignUrl200 = function(xhr, callback)
-                {
-                    var dataJSON = JSON.parse(xhr.responseText);
-                    url = dataJSON.signedUrl;
-                    callback(url);
-                };
-
-                requester.onSignUrlErr = function(xhr, isOnError)
+                requester.onSignUrlErr = function(xhr, error)
                 {
                     xhr.abort();
 
@@ -1393,7 +1385,20 @@ var extend = require('extend');
 
                             clearCurrentXhr(requester);
                             if (xhr.status === status_success) {
-                                requester.onSignUrl200(xhr, callback);
+                                var dataJSON = {};
+                                try {
+                                    dataJSON = JSON.parse(xhr.responseText);
+                                } catch (e) {
+
+                                }
+
+                                url = dataJSON.signedUrl;
+
+                                if (url) {
+                                    callback(url);
+                                } else {
+                                    requester.onSignUrlErr(xhr);
+                                }
                             } else {
                                 requester.onSignUrlErr(xhr);
                             }
@@ -1407,8 +1412,6 @@ var extend = require('extend');
                     };
 
                     xhr.send();
-
-
                 };
 
 

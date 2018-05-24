@@ -1361,9 +1361,8 @@ var extend = require('extend');
                 requester.onSignUrlErr = function(xhr, error)
                 {
                     xhr.abort();
-
                     me.error("Error");
-                    requester.onErr("Error");
+                    requester.onErr(xhr);
                 };
 
                 requester.onSignUrl = function (url, callback) {

@@ -1344,9 +1344,9 @@ var extend = require('extend');
                                 requester.onProgress(evt);
                             };
                         }
-                        xhr.send(payload);
 
-                    }
+                        xhr.send(payload);
+                    };
 
                     if (con.signUrl) {
                         requester.onSignUrl(url, onGotAuthCallback);
@@ -1360,7 +1360,7 @@ var extend = require('extend');
 
                 requester.onSignUrlErr = function(xhr, error)
                 {
-                    xhr.abort();
+                    //xhr.abort();
                     me.error("Error");
                     requester.onErr(xhr);
                 };
